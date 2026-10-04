@@ -121,7 +121,7 @@ npm run preview          # 本地起个 http 服务验收（file:// 直接双击
 
 ## 快速开始
 
-需要 Node.js 20 以上。零第三方依赖，不需要 `npm install`。
+需要 Node.js 20.11 以上（用到了 `import.meta.dirname`）。零第三方依赖，不需要 `npm install`。
 
 ```bash
 # 1. 把 Markdown 编译成带标签的结构化数据（改词表后要重跑）

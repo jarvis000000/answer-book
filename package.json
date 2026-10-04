@@ -5,14 +5,14 @@
   "description": "答案之书 —— 对《高性价比人生指南》657 条建议做标签化检索的问答工具",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.11"
   },
   "scripts": {
     "build": "node src/build/build.mjs",
     "build:static": "node src/build/build.mjs && node src/build/build-static.mjs",
     "preview": "node src/build/preview.mjs",
     "pretest": "node src/build/build.mjs",
-    "test": "node --test \"test/*.test.mjs\"",
+    "test": "node test/run.mjs",
     "eval": "node test/eval.mjs",
     "ask": "node src/cli.mjs",
     "serve": "node src/server.mjs"
