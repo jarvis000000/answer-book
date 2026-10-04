@@ -66,6 +66,36 @@ const GENDER_TEXT = { female: '女性专属', male: '男性专属', any: '不限
 const RATIO_LEVEL = { 极高: 3, 高: 2, 一般: 1 };
 
 /**
+ * 后端抽象：本地服务走 HTTP，纯静态托管走浏览器内的同一份检索引擎。
+ *
+ * 两者的返回结构完全一致（定义在 src/shared/client-payload.mjs），
+ * 所以下面所有渲染代码都不需要知道自己在跟谁说话。
+ * 这是「静态化」能做得这么轻的根本原因——界面层一行判断都不用加。
+ */
+const serverBackend = {
+  mode: 'server',
+
+  async meta() {
+    const res = await fetch('/api/meta');
+    if (!res.ok) throw new Error(`服务器返回 ${res.status}`);
+    return res.json();
+  },
+
+  async ask(question, { limit, sort }) {
+    const url = `/api/ask?q=${encodeURIComponent(question)}&limit=${limit}&sort=${encodeURIComponent(sort)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`服务器返回 ${res.status}`);
+    return res.json();
+  },
+
+  warmup() {},
+};
+
+/** 静态模式的数据源由 data-source.mjs 挂到 window 上；没有它就是在跑本地服务 */
+const backend =
+  window.__ANSWER_BOOK_STATIC__ && window.AnswerBookData ? window.AnswerBookData : serverBackend;
+
+/**
  * HTML 转义。外部文本一律走这里再进 DOM。
  *
  * @param {unknown} v 任意值
@@ -351,11 +381,7 @@ async function ask(question, options = {}) {
   history.replaceState(null, '', url);
 
   try {
-    const res = await fetch(
-      `/api/ask?q=${encodeURIComponent(q)}&limit=${FETCH_LIMIT}&sort=${encodeURIComponent(state.sort)}`
-    );
-    if (!res.ok) throw new Error(`服务器返回 ${res.status}`);
-    const data = await res.json();
+    const data = await backend.ask(q, { limit: FETCH_LIMIT, sort: state.sort });
 
     state.results = data.results ?? [];
     state.lastData = data;
@@ -387,11 +413,16 @@ async function ask(question, options = {}) {
     els.toolbar.hidden = true;
     els.grid.replaceChildren();
     els.more.hidden = true;
+    // 出错提示要分模式：静态托管上没有「本地服务」这回事，照着念会把人带沟里
+    const hint =
+      backend.mode === 'server'
+        ? '确认本地服务还在跑（npm run serve）。'
+        : '确认 dist/data/ 下的 JSON 都在，并且是通过 http 打开而不是 file:// 直接双击（浏览器会拦 file:// 的 fetch）。';
     els.empty.innerHTML = `
       <div class="empty">
         <span class="empty-mark">!</span>
         <strong>出错了</strong>
-        ${esc(err.message)}<br>确认本地服务还在跑（npm run serve）。
+        ${esc(err.message)}<br>${esc(hint)}
       </div>`;
   } finally {
     setLoading(false);
@@ -591,10 +622,17 @@ async function init() {
 
   // 先取元信息（排序方式、标签取值），再决定是否直接出结果
   try {
-    state.meta = await (await fetch('/api/meta')).json();
+    state.meta = await backend.meta();
     renderSorts();
   } catch {
     /* 元信息拿不到不影响检索，排序按钮会退化成只有「相关性」 */
+  }
+
+  // 静态模式下索引是延后建的（657 条约 130 ms）。趁浏览器空闲提前建好，
+  // 用户真正提问时就是瞬时的；正忙就直接让第一次搜索自己承担这点耗时。
+  if (backend.mode === 'static') {
+    const idle = window.requestIdleCallback ?? ((fn) => setTimeout(fn, 300));
+    idle(() => backend.warmup());
   }
 
   // 地址栏带 q 就直接出结果（刷新、分享都能复现同一次查询）

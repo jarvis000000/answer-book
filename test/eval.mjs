@@ -15,7 +15,7 @@
  * 调整权重、词表、阈值之后跑一遍，数字掉了就回退，别凭手感改。
  */
 
-import { createEngine } from '../src/search/engine.mjs';
+import { loadLocalEngine } from '../src/node/load-local.mjs';
 
 /** 评测用例：q 是问题，right 是正确答案的标题片段（命中任意一个即算对） */
 const CASES = [
@@ -74,7 +74,7 @@ const CASES = [
  */
 export function runEval(options = {}) {
   const topN = options.topN ?? 10;
-  const book = createEngine();
+  const book = loadLocalEngine();
   const details = [];
 
   let hit1 = 0;

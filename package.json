@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "node src/build/build.mjs",
+    "build:static": "node src/build/build.mjs && node src/build/build-static.mjs",
+    "preview": "node src/build/preview.mjs",
     "pretest": "node src/build/build.mjs",
     "test": "node --test \"test/*.test.mjs\"",
     "eval": "node test/eval.mjs",

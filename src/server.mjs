@@ -17,8 +17,9 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { join, extname, normalize } from 'node:path';
-import { createEngine } from './search/engine.mjs';
+import { loadLocalEngine } from './node/load-local.mjs';
 import { SORT_KEYS } from './search/sort.mjs';
+import { buildMeta, toAskPayload } from './shared/client-payload.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 const WEB_DIR = join(ROOT, 'web');
@@ -98,41 +99,12 @@ async function sendStatic(res, urlPath) {
   }
 }
 
-/**
- * 生成界面用的标签取值清单（只列出命中数够多的，避免下拉框里全是长尾）。
- *
- * @param {object} book 检索引擎
- * @returns {object} 各维度的可选值及计数
- */
-function buildMeta(book) {
-  const count = (pick) => {
-    const map = {};
-    for (const e of book.entries) for (const v of pick(e)) map[v] = (map[v] ?? 0) + 1;
-    return Object.entries(map)
-      .filter(([, n]) => n >= 3)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, n]) => ({ name, count: n }));
-  };
-
-  return {
-    total: book.entries.length,
-    sections: book.sections.length,
-    // 排序方式由后端定义、前端渲染，两边不会各写一份而漂移
-    sortModes: book.sortModes,
-    domains: count((e) => e.tags.domains),
-    ages: count((e) => e.tags.ages),
-    topics: count((e) => e.tags.topics),
-    audiences: count((e) => e.tags.audiences),
-    grades: count((e) => (e.grade ? [e.grade] : [])),
-    ratios: count((e) => [e.ratio]),
-    builtAt: book.entries[0]?.builtAt ?? null,
-  };
-}
-
 function main() {
   const { port, host } = parseArgs(process.argv.slice(2));
 
-  const book = createEngine();
+  const book = loadLocalEngine();
+  // 元信息与结果格式都由 src/shared/client-payload.mjs 定义，
+  // 纯静态模式用的是同一份，两边不会漂移
   const meta = buildMeta(book);
 
   const server = createServer(async (req, res) => {
@@ -164,30 +136,7 @@ function main() {
         const r = book.ask(q, { limit, sort });
         sendJson(res, 200, {
           question: q,
-          query: r.query,
-          safety: r.safety,
-          sort: r.sort,
-          totalCandidates: r.totalCandidates,
-          totalRelevant: r.totalRelevant,
-          results: r.results.map((x) => ({
-            id: x.entry.id,
-            ref: x.entry.ref,
-            section: x.entry.section,
-            sectionTitle: x.entry.sectionTitle,
-            num: x.entry.num,
-            title: x.entry.title,
-            plain: x.entry.plain,
-            gain: x.entry.gain,
-            note: x.entry.note,
-            costText: x.entry.costText,
-            cost: x.entry.cost,
-            grade: x.entry.grade,
-            ratio: x.entry.ratio,
-            tags: x.entry.tags,
-            sources: x.entry.sources,
-            score: Number(x.score.toFixed(4)),
-            reasons: x.reasons,
-          })),
+          ...toAskPayload(r),
         });
         return;
       }

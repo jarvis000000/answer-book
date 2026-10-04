@@ -16,11 +16,19 @@
 
 import { parseQuery } from '../search/parse-query.mjs';
 
-/** 规划器的共同接口：name + plan(); rerank 可选 */
+/**
+ * 规划器的共同接口：name + plan(); rerank 可选。
+ *
+ * 读环境变量前必须判断 process 存不存在：这个模块在浏览器里也会被加载
+ * （静态托管模式下检索逻辑整个跑在前端），而浏览器没有 process，
+ * 直接写 process.env 会在模块求值阶段抛 ReferenceError，把整个页面带崩。
+ */
+const ENV_SOURCE = typeof process !== 'undefined' && process.env ? process.env : {};
+
 const ENV = {
-  base: process.env.ANSWER_BOOK_LLM_BASE?.replace(/\/+$/, '') ?? '',
-  key: process.env.ANSWER_BOOK_LLM_KEY ?? '',
-  model: process.env.ANSWER_BOOK_LLM_MODEL ?? '',
+  base: (ENV_SOURCE.ANSWER_BOOK_LLM_BASE ?? '').replace(/\/+$/, ''),
+  key: ENV_SOURCE.ANSWER_BOOK_LLM_KEY ?? '',
+  model: ENV_SOURCE.ANSWER_BOOK_LLM_MODEL ?? '',
 };
 
 /**

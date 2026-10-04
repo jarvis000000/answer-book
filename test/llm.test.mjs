@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRulePlanner, isLLMConfigured } from '../src/llm/adapter.mjs';
 import { tokenize } from '../src/search/tokenize.mjs';
-import { createEngine } from '../src/search/engine.mjs';
+import { loadLocalEngine } from '../src/node/load-local.mjs';
 
 const ROOT = join(import.meta.dirname, '..');
 const taxonomy = JSON.parse(readFileSync(join(ROOT, 'data', 'taxonomy.json'), 'utf8'));
@@ -39,7 +39,7 @@ test('规则规划器产出与 parseQuery 同构的结果', async () => {
 });
 
 test('未配 LLM 时 askAsync 与 ask 结果完全一致', async () => {
-  const book = createEngine();
+  const book = loadLocalEngine();
   const questions = ['幽门螺杆菌要不要查', '孩子被同学欺负了怎么办', '被公司裁员了能拿多少钱'];
 
   for (const q of questions) {
@@ -60,7 +60,7 @@ test('接口不可达时退回规则结果，不抛异常', async () => {
   process.env.ANSWER_BOOK_LLM_BASE = 'http://127.0.0.1:1/v1';
   process.env.ANSWER_BOOK_LLM_MODEL = 'nonexistent';
 
-  const book = createEngine();
+  const book = loadLocalEngine();
   const r = await book.askAsync('租房押金不退怎么办', { limit: 3 });
 
   assert.ok(r.results.length > 0, 'LLM 挂掉后应该仍有规则结果');
@@ -71,7 +71,7 @@ test('接口不可达时退回规则结果，不抛异常', async () => {
 });
 
 test('答案正文只来自本地数据，不因接 LLM 而被改写', async () => {
-  const book = createEngine();
+  const book = loadLocalEngine();
   const r = await book.askAsync('戒烟有什么办法', { limit: 3 });
 
   const known = new Set(book.entries.map((e) => e.id));

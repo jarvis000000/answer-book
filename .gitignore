@@ -1,6 +1,10 @@
 # 构建产物：随时可以从 data/source + data/taxonomy.json 重建，不进版本库
 data/build/
 
+# 静态部署产物：由 GitHub Actions 在 CI 里现建（见 .github/workflows/pages.yml），
+# 提交它只会过时和撑大历史
+dist/
+
 # 依赖与缓存（本项目零依赖，留这条是防止将来误提交）
 node_modules/
 npm-debug.log*

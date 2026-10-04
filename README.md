@@ -64,35 +64,58 @@ npm run serve        →  http://127.0.0.1:5173
 `limit` 上限 100（界面取 60），`sort` 取 `relevance` / `grade` / `ratio` / `cheap` / `section`。
 `/api/meta` 返回可用的排序方式，界面直接照它渲染，不用两边各写一份枚举。
 
-### 一键静态部署（暂挂 · 尚未实现）
+### 一键静态部署
 
-> **这一节目前是占位说明，功能还没做。** 现在要用起来必须有一个 Node 进程在跑，
-> 不能直接扔到 GitHub Pages 这类纯静态托管上。
+```bash
+npm run build:static     # 产出 dist/，整个目录丢到任意静态托管即可
+npm run preview          # 本地起个 http 服务验收（file:// 直接双击不行，见下）
+```
 
-想要的是：一条命令出一条 `dist/`，推到 GitHub Pages 就能用——不用服务器、不用联网。
+线上示例：<https://jarvis000000.github.io/answer-book/>（由 `.github/workflows/pages.yml` 在推送到 main 时自动构建发布）
 
-**卡在哪**：检索跑在服务端。`/api/ask` 是 Node 进程现场算 BM25 和标签分的，
-静态托管上没有这个进程。所以不是加个构建脚本的事，要把检索内核整个搬到浏览器里。
+部署出去之后**没有服务端**：检索全部在访问者的浏览器里跑，占用为零、断网可用。
+推送到 main 就自动部署，不用手工操作。
 
-**大概要做的三步**：
+#### 检索为什么能整个搬到浏览器
 
-1. **构建期预计算**：把倒排索引、文档长度、IDF 这些 BM25 需要的中间量导出成静态文件，
-   别让浏览器每次现算——657 条现算一次要几百毫秒，还得先下载全文才能建索引。
-2. **让检索模块同时能在两边跑**：`src/search/` 那套现在只用标准 API，本来就是环境无关的，
-   主要改动是让索引从「构建期传进来」变成「运行时加载」。用 ES module 写的好处在这里体现。
-3. **数据分两批下发**：一次全下 2.3 MB 对手机不友好。分两段的实测体积：
+因为检索层本来就没有依赖 Node。整个 `src/search/` 加 `src/shared/` 里，
+用到 Node 专有 API 的只有一处——`engine.mjs` 里读 JSON 文件的 4 行。
+把它换成传参，同一份代码就能同时跑在两边：
 
-   | 内容 | 原始 | gzip |
-   |------|------|------|
-   | 全部字段（含来源、交叉引用） | 2358 KB | 670 KB |
-   | 去掉来源等长字段 | 1412 KB | 491 KB |
-   | **只留标题 + 标签 + 证据等级 + 性价比** | **207 KB** | **45 KB** |
+| 谁在跑 | 数据从哪来 |
+|--------|-----------|
+| CLI、`npm run serve` | `src/node/load-local.mjs` — 读磁盘 |
+| 浏览器（静态托管） | `web/data-source.mjs` — `fetch` 静态 JSON |
 
-   第一批只下 45 KB（gzip 后）就够跑完检索和排序，点开某一条时再去取那一条的完整正文。
-   这个体积对静态托管完全没有压力。
+`createEngine()` 两边共用，排序结果逐条一致。**这不是靠自觉，是构建期强制校验的**：
+`build:static` 跑完会拿瘦身后的数据重建一次索引，用 7 个查询比对过滤前后的结果，
+不一致就直接构建失败（见 `src/build/build-static.mjs` 的 `verifyIndexParity`）。
+这条自检拦的是最容易出事的一类改动——少拷一个参与建索引的字段，页面照样能跑，
+只有搜索结果悄悄变差。
 
-**为什么现在没做**：本地起服务这条路已经够用（`npm run serve`，一条命令），
-而静态化要动检索内核的加载方式，值得单独一轮做，不适合顺手塞进界面改版里。
+索引在浏览器里现建（657 条约 130 ms，71777 个词条），**不在构建期预计算**：
+倒排索引序列化出来比重建它本身还大。页面渲染完会在空闲时段提前建好，
+用户真正提问时是瞬时的。
+
+#### 下载量
+
+打开页面要下载的 JSON 约 1.8 MB，gzip 后 **约 650 KB**：
+
+| 文件 | 原始 | gzip |
+|------|------|------|
+| `data/entries.json` | 1772 KB | 638 KB |
+| `data/taxonomy.json` | 19 KB | 8 KB |
+| 其余（同义词、节信息、元信息） | 8 KB | 4 KB |
+
+**一个量过但没做的优化**：`sources`（原始文献链接）占了 359 KB / 121 KB gzip，
+而检索和列表渲染都不需要它。拆成按需加载的文件，首屏能少下 146 KB（gzip），
+代价是多一个取详情的接口、弹窗变成异步。按 YAGNI 先不做——
+650 KB 是一次性成本，之后全程离线可用；真觉得慢了，上面这条路径是现成的。
+
+#### 为什么不能双击 index.html 打开
+
+静态模式靠 `fetch` 读 `data/*.json`，而浏览器会拦掉 `file://` 下的 fetch（同源策略）。
+必须走 http——本地用 `npm run preview`，线上由托管服务提供，都行。
 
 ---
 
@@ -109,10 +132,14 @@ npm run ask -- "一个6岁儿童有哪些建议和指南"
 npm run ask -- --limit 10 "租房押金不退怎么办"
 npm run ask -- --json "被公司裁员了能拿多少钱"     # 机读输出
 
-# 3. 本地网页
+# 3. 本地网页（检索跑在 Node 服务端）
 npm run serve            # 打开 http://127.0.0.1:5173
 
-# 4. 测试与评测
+# 4. 静态部署产物（检索跑在浏览器里，可托管到任意静态服务）
+npm run build:static     # 产出 dist/
+npm run preview          # 起个 http 服务验收 dist/
+
+# 5. 测试与评测
 npm test                 # 73 条单元测试
 npm run eval             # 32 条检索评测，报 hit@1 / hit@3 / hit@5 / MRR
 ```
@@ -266,16 +293,21 @@ export ANSWER_BOOK_LLM_MODEL=gpt-4o-mini
 │   ├── overrides.json     人工标签覆盖
 │   └── build/             构建产物 entries.json / sections.json / stats.json（可重建）
 ├── src/
-│   ├── shared/cost.mjs    成本权重与性价比算法（构建、排序、界面三处共用一份）
+│   ├── shared/            cost.mjs 成本与性价比 · client-payload.mjs 前后端共用的数据格式
 │   ├── build/             parse.mjs 解析 · classify.mjs 打标 · build.mjs 入口
+│   │                      · build-static.mjs 静态产物 · preview.mjs 静态预览
 │   ├── search/            tokenize 切分 · index BM25 · parse-query 查询解析
-│   │                      · rank 相关性打分 · sort 排序方式 · engine 门面
+│   │                      · rank 相关性打分 · sort 排序方式 · engine 门面（不做 I/O）
+│   ├── node/load-local.mjs  Node 侧读数（供 CLI 与服务端）
 │   ├── llm/adapter.mjs    LLM 规划器（可选）
 │   ├── cli.mjs            命令行
 │   └── server.mjs         本地网页服务
-├── web/                   index.html · app.js · style.css（零依赖）
+├── web/                   index.html · app.js · style.css
+│                          · data-source.mjs 静态模式的数据层（只在 dist/ 里生效）
 └── test/                  73 条单元测试 + eval.mjs 评测集
 ```
+
+构建产物都可由源数据重建，因此不进版本库：`data/build/`（结构化数据）与 `dist/`（静态站点）。
 
 ## 关于「一个没解决的问题」
 

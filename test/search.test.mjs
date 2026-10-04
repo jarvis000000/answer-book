@@ -9,9 +9,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tokenize, stripQueryPhrases, isFunctionOnly } from '../src/search/tokenize.mjs';
 import { cnToNumber } from '../src/search/parse-query.mjs';
-import { createEngine } from '../src/search/engine.mjs';
+import { loadLocalEngine } from '../src/node/load-local.mjs';
 
-const book = createEngine();
+const book = loadLocalEngine();
 
 // —— 切分 ——
 

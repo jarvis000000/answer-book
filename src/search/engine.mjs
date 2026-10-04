@@ -1,38 +1,19 @@
 /**
- * 检索引擎门面：把「加载数据 → 建索引 → 解析问题 → 召回 → 排序」串成一次 ask()。
+ * 检索引擎门面：把「建索引 → 解析问题 → 召回 → 排序」串成一次 ask()。
  *
- * 对外只暴露 answerBook.ask(question) 和 .browse(filter)，
- * CLI、HTTP 服务和将来的 LLM 重排都从这里取数，保证三条路径看到的结果完全一致。
+ * **这个模块不做任何 I/O**：数据由调用方传进来，所以同一份代码既能在 Node 里跑
+ * （CLI、本地服务），也能在浏览器里跑（纯静态托管）。取数方式见：
+ *   Node   → src/node/load-local.mjs（读磁盘）
+ *   浏览器 → web/data-source.mjs（fetch 静态 JSON）
+ * 两边用的是同一个 createEngine，排序结果逐条一致。
  */
 
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tokenize } from './tokenize.mjs';
 import { buildIndex, bm25 } from './index.mjs';
 import { parseQuery, parseSafetyFlags, expandSynonyms } from './parse-query.mjs';
 import { rank, pruneByRelevance } from './rank.mjs';
 import { sortResults, SORT_MODES } from './sort.mjs';
 import { isLLMConfigured, createRulePlanner, createLLMPlanner } from '../llm/adapter.mjs';
-
-const ROOT = join(import.meta.dirname, '..', '..');
-
-/**
- * 读取构建产物，缺文件时给出可操作的报错。
- *
- * @param {string} relPath 相对项目根的路径
- * @returns {any}
- */
-function loadJson(relPath) {
-  const path = join(ROOT, relPath);
-  try {
-    return JSON.parse(readFileSync(path, 'utf8'));
-  } catch (err) {
-    if (err.code === 'ENOENT') {
-      throw new Error(`缺少 ${relPath}，请先运行：npm run build`);
-    }
-    throw err;
-  }
-}
 
 /**
  * 取用于建索引的正文文本。
@@ -80,25 +61,41 @@ const SAFETY_ADVICE = {
 /**
  * 创建一本可检索的答案之书。
  *
+ * @param {object} data 数据包
+ * @param {object[]} data.entries 已打标的条目（静态模式下可以是"精简版"，
+ *                                只带检索和列表渲染需要的字段）
+ * @param {object[]} data.sections 节元信息
+ * @param {object} data.taxonomy taxonomy.json 内容
+ * @param {object} [data.synonyms] 同义词表，缺省即不扩展
+ * @param {object} [options] { lazyIndex } lazyIndex=true 时把建索引推迟到第一次检索，
+ *                           让页面首屏先出来，索引在空闲时段再建
  * @returns {object} 检索器实例
  */
-export function createEngine() {
-  const taxonomy = loadJson(join('data', 'taxonomy.json'));
-  const synonyms = loadJson(join('data', 'synonyms.json'));
-  const entries = loadJson(join('data', 'build', 'entries.json'));
-  const sections = loadJson(join('data', 'build', 'sections.json'));
+export function createEngine(data, options = {}) {
+  const { entries, sections, taxonomy, synonyms = {} } = data;
 
-  // taxonomy 里以下划线开头的键是注释，构建期已剥离；这里再剥一次以防手工改过
-  delete taxonomy._note;
+  if (!entries?.length) throw new Error('createEngine 缺少 entries 数据');
+  if (!taxonomy?.domains) throw new Error('createEngine 缺少 taxonomy 数据');
 
-  const index = buildIndex(entries, bodyOf, tokenize);
+  // 静态模式下 taxonomy 也是从 JSON 读的，下划线开头的注释键要剥掉
+  for (const key of Object.keys(taxonomy)) {
+    if (key.startsWith('_')) delete taxonomy[key];
+  }
+
+  // 索引可以延后建：657 条约 130 ms，放在首屏渲染之后再算，用户感觉不到
+  let index = null;
+  const ensureIndex = () => {
+    if (!index) index = buildIndex(entries, bodyOf, tokenize);
+    return index;
+  };
+  if (!options.lazyIndex) ensureIndex();
 
   /** 年龄段区间映射，查表时反复要用 */
   const bandsForRangeBound = (from, to) => bandsForRange(from, to, taxonomy.ageBands.bands);
 
   /** 查询词在语料里的最低文档数；低于此数按跨词边界的碎片处理 */
   const MIN_DF = 3;
-  const isKnownToken = (t) => (index.postings.get(t)?.size ?? 0) >= MIN_DF;
+  const isKnownToken = (t) => (ensureIndex().postings.get(t)?.size ?? 0) >= MIN_DF;
 
   /** LLM 规划器，第一次调用 askAsync 时才创建；默认走规则实现 */
   let planner = null;
@@ -146,13 +143,13 @@ export function createEngine() {
     // 查询 token 为空（比如只输入了「怎么办」）时，退化成按标签浏览，
     // 而不是返回空列表——空结果比泛泛的结果更让人困惑。
     const candidates = query.tokens.length
-      ? bm25(index, query.tokens, 300)
+      ? bm25(ensureIndex(), query.tokens, 300)
       : entries.map((_, docIdx) => ({ docIdx, score: 1, matched: [] }));
 
     // rank 不设上限：换排序方式时要在「全部相关条目」里重排，
     // 如果这里先截断，按等级排就只能在一小撮里挑，排序功能会变得名不副实。
     const ranked = pruneByRelevance(
-      rank(entries, candidates, query, taxonomy, index, candidates.length)
+      rank(entries, candidates, query, taxonomy, ensureIndex(), candidates.length)
     );
 
     const flags = parseSafetyFlags(question);
@@ -173,6 +170,18 @@ export function createEngine() {
     entries,
     sections,
     taxonomy,
+
+    /**
+     * 提前把索引建好。配合 lazyIndex 用：页面先渲染出来，再在空闲时段调它，
+     * 等用户真正提问时索引已经就绪，检索是瞬时的。
+     *
+     * @returns {{terms:number, ms:number}} 索引词条数与建索引耗时
+     */
+    warmup() {
+      const t0 = Date.now();
+      const built = ensureIndex();
+      return { terms: built.postings.size, ms: Date.now() - t0 };
+    },
     /** 可选的排序方式，供界面生成切换按钮，避免两边各写一份 */
     sortModes: SORT_MODES,
 

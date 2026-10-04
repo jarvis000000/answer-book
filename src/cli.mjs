@@ -13,7 +13,7 @@
  */
 
 import { createInterface } from 'node:readline';
-import { createEngine } from './search/engine.mjs';
+import { loadLocalEngine } from './node/load-local.mjs';
 
 /** ANSI 颜色；--no-color 或管道输出时全部退化为空串 */
 function makePalette(enabled) {
@@ -197,7 +197,7 @@ async function main() {
 
   let book;
   try {
-    book = createEngine();
+    book = loadLocalEngine();
   } catch (err) {
     console.error(c.red(err.message));
     process.exitCode = 1;

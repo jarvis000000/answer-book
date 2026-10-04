@@ -1,0 +1,65 @@
+# 把静态产物自动部署到 GitHub Pages。
+#
+# 触发：推送到 main，或在 Actions 页面手动跑一次。
+# 部署出去的站点**没有服务端**——检索全在访问者的浏览器里跑，
+# 所以这是个纯静态站点，托管成本为零，断网也能用。
+#
+# 首次启用：这个工作流会自己打开 Pages（enablement: true），
+# 不需要先去仓库设置里手工点一遍。如果组织策略不允许自动开启，
+# 那就去 Settings → Pages 把 Source 选成 "GitHub Actions"。
+
+name: 部署到 GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GITHUB_TOKEN 的权限：读代码、写 Pages、用 OIDC 换部署凭据
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署；新的推送取消正在排队的旧任务
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建静态产物
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 先跑测试再构建：检索算错了就不该发出去。
+      # build-static 自己还会做一次「静态模式与服务端结果是否一致」的自检，双保险。
+      - name: 跑测试
+        run: npm test
+
+      - name: 构建静态产物
+        run: npm run build:static
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: 发布
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

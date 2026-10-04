@@ -11,9 +11,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sortResults, SORT_MODES, SORT_KEYS } from '../src/search/sort.mjs';
 import { costScore } from '../src/shared/cost.mjs';
-import { createEngine } from '../src/search/engine.mjs';
+import { loadLocalEngine } from '../src/node/load-local.mjs';
 
-const book = createEngine();
+const book = loadLocalEngine();
 const QUESTION = '家里老人总是摔跤怎么办';
 
 /** 造一条最小可用的结果对象，只填排序要用到的字段 */
