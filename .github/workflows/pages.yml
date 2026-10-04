@@ -4,9 +4,11 @@
 # 部署出去的站点**没有服务端**——检索全在访问者的浏览器里跑，
 # 所以这是个纯静态站点，托管成本为零，断网也能用。
 #
-# 首次启用：这个工作流会自己打开 Pages（enablement: true），
-# 不需要先去仓库设置里手工点一遍。如果组织策略不允许自动开启，
-# 那就去 Settings → Pages 把 Source 选成 "GitHub Actions"。
+# 首次启用需要先开一次 Pages（一次性操作，本仓库已完成）：
+#   Settings → Pages → Source 选 "GitHub Actions"
+# 或者命令行一次性建好：
+#   gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow
+# 之后每次推送都会自动构建发布，不需要再管。
 
 name: 部署到 GitHub Pages
 
@@ -45,9 +47,12 @@ jobs:
       - name: 构建静态产物
         run: npm run build:static
 
+      # 不加 enablement: true。
+      # 那是「顺手帮你把 Pages 建出来」，用的是工作流的 GITHUB_TOKEN，
+      # 而创建 Pages 站点需要仓库管理权限，普通 token 会报
+      # Resource not accessible by integration，把整个构建带挂。
+      # 开启 Pages 是一次性的仓库设置（见 README），不该每次构建都试一遍。
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
