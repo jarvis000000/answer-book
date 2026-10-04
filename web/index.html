@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>答案之书 · 从《高性价比人生指南》里找答案</title>
+<meta name="description" content="把你的处境说出来，从 657 条按性价比排序的人生建议里找出相关的那些。离线运行，不改写原文。">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2300a96e'/%3E%3Ctext x='16' y='23' font-size='19' text-anchor='middle' fill='%23fff' font-family='sans-serif' font-weight='600'%3E答%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- 背景光晕：两团极淡的薄荷与天蓝，给大面积浅色底一点空气感 -->
+<div class="bloom" aria-hidden="true"></div>
+
+<!-- ============ 顶栏：提问入口，滚动时始终吸附在顶部 ============ -->
+<header class="topbar" id="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/" aria-label="答案之书 首页">
+      <span class="brand-mark" aria-hidden="true">答</span>
+      <span class="brand-text">答案之书</span>
+    </a>
+
+    <form class="searchbar" id="askForm" role="search">
+      <svg class="searchbar-icon" viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M12.8 12.8 L17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <input id="q" name="q" type="search" autocomplete="off" spellcheck="false"
+             placeholder="说说你的处境，例如：我是一个 45 岁女性，需要注意哪些健康问题">
+      <button class="searchbar-btn" id="submitBtn" type="submit">查一查</button>
+    </form>
+
+    <button class="icon-btn" id="themeToggle" type="button" title="切换日间 / 夜间" aria-label="切换日间 / 夜间">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M13 2.5a7.5 7.5 0 1 0 4.5 13.6A8 8 0 0 1 13 2.5z" fill="currentColor"/></svg>
+    </button>
+  </div>
+</header>
+
+<!-- ============ 首屏标题区（往下滚就走掉） ============ -->
+<section class="hero" id="hero">
+  <h1>不知道怎么办的时候，<br>先来这儿查一条。</h1>
+  <p class="hero-sub">
+    657 条按性价比排好的人生建议，每条写明花掉什么、换回什么、证据有多硬。<br>
+    说清你是谁、遇到什么事，按标签找出来的就是写给你的那些。
+  </p>
+  <div class="samples" id="samples"><span class="samples-label">试试：</span></div>
+</section>
+
+<main>
+  <!-- 三类需要立刻行动的问题，提示要压在结果前面 -->
+  <div id="safety"></div>
+
+  <!-- 系统怎么理解你的问题：匹配不准时这是排查入口 -->
+  <div id="interpretation" class="interp" hidden></div>
+
+  <!-- 结果工具栏：计数 + 排序 + 等级筛选，随滚动吸附在搜索栏下方 -->
+  <div class="toolbar" id="toolbar" hidden>
+    <div class="toolbar-row">
+      <p class="toolbar-count" id="countLine"></p>
+      <div class="sorts" id="sorts" role="group" aria-label="排序方式"></div>
+    </div>
+    <div class="toolbar-row toolbar-row-sub">
+      <span class="filter-label">证据等级</span>
+      <div class="chips" id="gradeFilter" role="group" aria-label="按证据等级筛选"></div>
+      <button class="link-btn" id="expandAll" type="button">展开全部</button>
+    </div>
+  </div>
+
+  <div id="loading" class="skeleton" hidden aria-hidden="true"></div>
+  <div class="grid" id="grid" aria-live="polite"></div>
+  <div class="more" id="more" hidden>
+    <button class="more-btn" id="moreBtn" type="button"></button>
+  </div>
+  <div id="empty"></div>
+</main>
+
+<footer>
+  <p>
+    答案正文来自 <a href="https://github.com/eternity4719/HowToLiveBetter" target="_blank" rel="noopener">《高性价比人生指南》</a>，
+    按 <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a> 使用，逐字引用，不改写。
+  </p>
+  <p>
+    这里是通用口径，不替代医生、律师、会计。正在发生的急症先打 120，有伤害自己的念头先打 12356，法律程序已经开始就去找律师。
+  </p>
+</footer>
+
+<!-- ============ 详情弹窗 ============ -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <!-- 面板本身不滚动，头部固定、只有 .modal-body 滚动：
+       长条目往下翻时，标题和关闭按钮始终留在原地。 -->
+  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1" id="modalPanel">
+    <header class="modal-head" id="modalHead"></header>
+    <div class="modal-body" id="modalBody"></div>
+    <button class="modal-close" type="button" data-close="1" aria-label="关闭">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

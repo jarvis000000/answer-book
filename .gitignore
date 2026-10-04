@@ -1,0 +1,17 @@
+# 构建产物：随时可以从 data/source + data/taxonomy.json 重建，不进版本库
+data/build/
+
+# 依赖与缓存（本项目零依赖，留这条是防止将来误提交）
+node_modules/
+npm-debug.log*
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 临时验证产物（截图等）
+.tmp-*
+*.png
+!web/**/*.png

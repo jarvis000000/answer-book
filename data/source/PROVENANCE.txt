@@ -1,0 +1,38 @@
+本目录下 34 个 Markdown 文件的来源与许可
+=========================================
+
+出处
+----
+原始仓库：https://github.com/eternity4719/HowToLiveBetter
+书名：《高性价比人生指南》
+获取方式：git clone --depth 1，取 book/ 下全部 34 个 .md 文件，原样复制。
+
+这些文件**不做任何修改**。本项目对内容的处理全部发生在这些文件之外：
+解析成结构化数据（src/build/parse.mjs）、打标签（src/build/classify.mjs），
+结果写入 data/build/。搜索、排序、界面都不改动正文一个字。
+
+抓取时间：2026-10-04
+条目数：657 条 / 34 节
+
+许可
+----
+正文内容：Creative Commons Attribution 4.0 International（CC BY 4.0）
+          https://creativecommons.org/licenses/by/4.0/
+上游 LICENSE 文件为 CC BY 4.0 全文，LICENSE-CODE 为 MIT（覆盖上游的构建脚本）。
+
+依 CC BY 4.0 的要求，使用、转载、改编本目录内容时必须：
+  1. 注明出处（作者 eternity4719，书名《高性价比人生指南》，附原仓库链接）
+  2. 附上 CC BY 4.0 许可链接
+  3. 说明是否作了改动（本项目未改动正文，只做了检索与标签）
+
+更新方式
+--------
+上游每日自动重建在线阅读页，正文会持续修订。要同步最新版本：
+
+  git clone --depth 1 https://github.com/eternity4719/HowToLiveBetter.git /tmp/up
+  cp /tmp/up/book/*.md data/source/
+  npm run build && npm test && npm run eval
+
+注意：条目数、A/B/C 分级一旦变化，test/parse.test.mjs 里的断言会失败——
+那些数字是刻意钉住的，用来提醒「正文变了」，而不是让它们悄悄漂移。
+届时需要人工核对是上游改对了还是改错了，再更新断言。

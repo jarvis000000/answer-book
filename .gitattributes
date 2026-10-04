@@ -1,0 +1,20 @@
+# 换行符统一：仓库里一律存 LF，检出时由 git 按平台决定。
+# 不加这一条，Windows 上提交会把行尾写成 CRLF，别的平台拉下来全是改动。
+* text=auto
+
+# 这些是文本，明确按 LF 存
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# 上游正文副本按二进制处理，避免 git 去动这些不该被改动的文件
+data/source/*.md -text
+
+# 二进制文件不做任何转换
+*.png binary
+*.jpg binary
+*.ico binary

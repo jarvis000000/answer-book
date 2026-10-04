@@ -1,0 +1,19 @@
+{
+  "name": "answer-book",
+  "version": "0.1.0",
+  "private": true,
+  "description": "答案之书 —— 对《高性价比人生指南》657 条建议做标签化检索的问答工具",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node src/build/build.mjs",
+    "pretest": "node src/build/build.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "eval": "node test/eval.mjs",
+    "ask": "node src/cli.mjs",
+    "serve": "node src/server.mjs"
+  },
+  "license": "MIT"
+}
